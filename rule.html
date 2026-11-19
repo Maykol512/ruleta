@@ -1,0 +1,1686 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ruleta de Grupos y Temas</title>
+    <!-- Tailwind CSS para estilos responsivos y modernos -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js para efectos de sonido sintéticos (ticks de ruleta y fanfarria) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- Fuentes Google: Inter y Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Outfit', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Estilos personalizados para animaciones de la ruleta y confeti */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        h1, h2, h3, .font-display {
+            font-family: 'Outfit', sans-serif;
+        }
+
+        /* Animación de rebote del puntero al pasar los pines */
+        @keyframes pointerTick {
+            0% { transform: translateX(-50%) rotate(0deg); }
+            40% { transform: translateX(-50%) rotate(-24deg); }
+            100% { transform: translateX(-50%) rotate(0deg); }
+        }
+        .pointer-ticking {
+            animation: pointerTick 0.11s ease-out;
+        }
+
+        /* Animación de aparición suave para modales y tarjetas */
+        @keyframes popIn {
+            0% { opacity: 0; transform: scale(0.92) translateY(10px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .animate-pop-in {
+            animation: popIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        /* Barra de desplazamiento estilizada */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.4);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(148, 163, 184, 0.7);
+        }
+
+        /* Canvas de confeti superpuesto sin bloquear clics */
+        #confettiCanvas {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 60;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 min-h-screen transition-colors duration-300 selection:bg-indigo-500 selection:text-white">
+
+    <!-- Canvas de confeti para celebraciones -->
+    <canvas id="confettiCanvas"></canvas>
+
+    <!-- Contenedor de notificaciones Toast (reemplaza alert()) -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-xs w-full pointer-events-none"></div>
+
+    <!-- Barra de navegación superior -->
+    <header class="sticky top-0 z-30 backdrop-blur-md bg-white/80 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+            <!-- Logo y título -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0">
+                    <!-- Icono SVG de ruleta -->
+                    <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="9"></circle>
+                        <circle cx="12" cy="12" r="2.5"></circle>
+                        <line x1="12" y1="3" x2="12" y2="9.5"></line>
+                        <line x1="12" y1="14.5" x2="12" y2="21"></line>
+                        <line x1="3" y1="12" x2="9.5" y2="12"></line>
+                        <line x1="14.5" y1="12" x2="21" y2="12"></line>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-extrabold tracking-tight leading-tight text-slate-900 dark:text-white">
+                        Ruleta de Grupos y Temas
+                    </h1>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
+                        Asigna temas al azar de forma justa y visual
+                    </p>
+                </div>
+            </div>
+
+            <!-- Controles globales: Sonido, Tema Oscuro y Reinicio -->
+            <div class="flex items-center gap-2">
+                <button id="btnSound" type="button" title="Activar o silenciar sonido"
+                    class="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+                    <span id="iconSoundOn">
+                        <svg class="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14"></path>
+                        </svg>
+                    </span>
+                    <span id="iconSoundOff" class="hidden">
+                        <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5z"></path>
+                            <line x1="23" y1="9" x2="17" y2="15"></line>
+                            <line x1="17" y1="9" x2="23" y2="15"></line>
+                        </svg>
+                    </span>
+                    <span class="hidden md:inline" id="labelSound">Sonido</span>
+                </button>
+
+                <button id="btnTheme" type="button" title="Cambiar modo claro/oscuro"
+                    class="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition text-slate-700 dark:text-slate-200">
+                    <svg id="iconMoon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"></path>
+                    </svg>
+                    <svg id="iconSun" class="w-5 h-5 hidden text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+                    </svg>
+                </button>
+
+                <button id="btnResetSession" type="button" title="Restaurar todos los grupos y temas sorteados"
+                    class="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 dark:hover:border-rose-800 transition text-sm font-medium flex items-center gap-1.5">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    <span class="hidden sm:inline">Reiniciar sorteo</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Contenido Principal -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+
+            <!-- COLUMNA IZQUIERDA (7 cols en desktop): Selector de fase + Ruleta Interactiva -->
+            <section class="lg:col-span-7 flex flex-col items-center gap-5">
+
+                <!-- Tarjeta de Estado del Flujo (Paso 1: Grupo -> Paso 2: Tema) -->
+                <div class="w-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <!-- Selector manual / indicador de fase -->
+                        <div class="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-800 w-full sm:w-auto">
+                            <button id="tabWheelGroups" type="button"
+                                class="flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-sm">
+                                <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+                                <span>1. Grupos</span>
+                                <span id="badgeWheelGroupsCount" class="text-xs px-1.5 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">0</span>
+                            </button>
+                            <button id="tabWheelTopics" type="button"
+                                class="flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                                <span>2. Temas</span>
+                                <span id="badgeWheelTopicsCount" class="text-xs px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">0</span>
+                            </button>
+                        </div>
+
+                        <!-- Opción de modo guiado -->
+                        <label class="flex items-center gap-2 text-xs sm:text-sm text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+                            <input id="chkAutoRemove" type="checkbox" checked
+                                class="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                            <span>Quitar al salir</span>
+                        </label>
+                    </div>
+
+                    <!-- Banner de turno activo (muestra el grupo seleccionado esperando tema) -->
+                    <div id="pendingGroupBanner" class="hidden mt-3 p-3 rounded-xl bg-gradient-to-r from-indigo-50 to-emerald-50 dark:from-indigo-950/50 dark:to-emerald-950/40 border border-indigo-200/70 dark:border-indigo-800/60 flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shrink-0">✓</span>
+                            <div class="truncate">
+                                <p class="text-xs font-medium text-indigo-600 dark:text-indigo-300 uppercase tracking-wider">Grupo seleccionado — Ahora gira por su tema</p>
+                                <p id="pendingGroupName" class="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate"></p>
+                            </div>
+                        </div>
+                        <button id="btnCancelPendingGroup" type="button" title="Cancelar selección de este grupo"
+                            class="text-xs px-2.5 py-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-white/80 dark:hover:bg-slate-800 transition shrink-0">
+                            Cambiar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Contenedor principal de la Ruleta -->
+                <div class="w-full bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 sm:p-7 shadow-lg shadow-slate-200/50 dark:shadow-none flex flex-col items-center relative overflow-hidden">
+
+                    <!-- Etiqueta flotante del modo actual -->
+                    <div class="mb-3 flex items-center gap-2">
+                        <span id="wheelModeBadge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">
+                            Sorteando: Grupos
+                        </span>
+                    </div>
+
+                    <!-- Área de la ruleta con puntero superior -->
+                    <div id="wheelWrapper" class="relative w-full max-w-[440px] aspect-square flex items-center justify-center my-1 select-none">
+                        <!-- Puntero / Flecha superior -->
+                        <div id="wheelPointer" class="absolute -top-2 left-1/2 -translate-x-1/2 z-20 origin-top drop-shadow-md pointer-events-none">
+                            <svg width="42" height="48" viewBox="0 0 42 48" fill="none">
+                                <path d="M21 46L5 14C2.5 9 6.1 3 11.7 3H30.3C35.9 3 39.5 9 37 14L21 46Z" fill="#EF4444" stroke="white" stroke-width="3.5" stroke-linejoin="round"/>
+                                <circle cx="21" cy="14" r="4.5" fill="white"/>
+                            </svg>
+                        </div>
+
+                        <!-- Canvas dinámico de la ruleta -->
+                        <canvas id="wheelCanvas" class="w-full h-full cursor-pointer"></canvas>
+
+                        <!-- Botón central flotante sobre el eje -->
+                        <button id="btnCenterSpin" type="button" aria-label="Girar ruleta"
+                            class="absolute z-10 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white dark:bg-slate-900 border-4 border-indigo-600 dark:border-indigo-400 shadow-xl flex flex-col items-center justify-center hover:scale-105 active:scale-95 transition-transform focus:outline-none focus:ring-4 focus:ring-indigo-500/40 group">
+                            <span class="font-display font-extrabold text-xs sm:text-sm tracking-wide text-indigo-700 dark:text-indigo-300 group-hover:text-indigo-600">GIRAR</span>
+                        </button>
+                    </div>
+
+                    <!-- Controles inferiores de la Ruleta -->
+                    <div class="w-full mt-5 flex flex-col sm:flex-row items-center justify-center gap-3">
+                        <button id="btnSpinMain" type="button"
+                            class="w-full sm:w-auto min-w-[210px] px-7 py-3.5 rounded-2xl font-display font-bold text-base sm:text-lg text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 active:scale-[0.98] shadow-lg shadow-indigo-500/30 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                            </svg>
+                            <span id="btnSpinText">¡Girar por Grupo!</span>
+                        </button>
+
+                        <button id="btnQuickAssign" type="button" title="Asigna automáticamente todos los grupos y temas restantes de una sola vez"
+                            class="w-full sm:w-auto px-4 py-3.5 rounded-2xl text-sm font-semibold border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition flex items-center justify-center gap-2">
+                            <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                            </svg>
+                            <span>Sortear todo rápido</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- COLUMNA DERECHA (5 cols en desktop): Panel de Entrada (Grupos y Temas) + Resultados -->
+            <section class="lg:col-span-5 flex flex-col gap-6">
+
+                <!-- Panel de Configuración de Listas -->
+                <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                    <!-- Pestañas de edición: Grupos / Temas -->
+                    <div class="grid grid-cols-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40">
+                        <button id="editorTabGroups" type="button"
+                            class="py-3.5 px-4 text-sm font-bold border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-900 transition flex items-center justify-center gap-2">
+                            <span>👥 Grupos</span>
+                            <span id="countTotalGroups" class="text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60">0</span>
+                        </button>
+                        <button id="editorTabTopics" type="button"
+                            class="py-3.5 px-4 text-sm font-bold border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition flex items-center justify-center gap-2">
+                            <span>📚 Temas</span>
+                            <span id="countTotalTopics" class="text-xs px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700">0</span>
+                        </button>
+                    </div>
+
+                    <!-- Cuerpo del Editor de Grupos -->
+                    <div id="panelGroups" class="p-4 sm:p-5 space-y-3">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-xs text-slate-500 dark:text-slate-400">
+                                Escribe o pega un grupo por línea.
+                            </p>
+                            <div class="flex items-center gap-1.5">
+                                <button id="btnAutoGenGroups" type="button"
+                                    class="text-xs px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 font-medium transition">
+                                    + Generar 6
+                                </button>
+                                <button id="btnShuffleGroups" type="button" title="Mezclar orden"
+                                    class="text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-medium transition">
+                                    Mezclar
+                                </button>
+                                <button id="btnClearGroups" type="button" title="Borrar lista"
+                                    class="text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 font-medium transition">
+                                    Limpiar
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Entrada rápida individual -->
+                        <div class="flex gap-2">
+                            <input id="inputSingleGroup" type="text" placeholder="Ej: Grupo Los Innovadores..."
+                                class="flex-1 px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                            <button id="btnAddSingleGroup" type="button"
+                                class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition shrink-0">
+                                Añadir
+                            </button>
+                        </div>
+
+                        <!-- Área de texto multilínea sincronizada -->
+                        <textarea id="textareaGroups" rows="6" placeholder="Grupo 1&#10;Grupo 2&#10;Grupo 3..."
+                            class="w-full p-3.5 text-sm leading-relaxed rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition resize-y font-medium"></textarea>
+
+                        <!-- Resumen de disponibilidad -->
+                        <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-1">
+                            <span id="statusGroupsInfo">Disponibles en ruleta: 0</span>
+                            <button id="btnGoToTopicsEditor" type="button" class="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline">
+                                Ir a poner Temas →
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Cuerpo del Editor de Temas -->
+                    <div id="panelTopics" class="p-4 sm:p-5 space-y-3 hidden">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-xs text-slate-500 dark:text-slate-400">
+                                Escribe o pega un tema por línea.
+                            </p>
+                            <div class="flex items-center gap-1.5">
+                                <button id="btnShuffleTopics" type="button" title="Mezclar orden"
+                                    class="text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-medium transition">
+                                    Mezclar
+                                </button>
+                                <button id="btnClearTopics" type="button" title="Borrar lista"
+                                    class="text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 font-medium transition">
+                                    Limpiar
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Entrada rápida individual -->
+                        <div class="flex gap-2">
+                            <input id="inputSingleTopic" type="text" placeholder="Ej: Inteligencia Artificial en la Educación..."
+                                class="flex-1 px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition">
+                            <button id="btnAddSingleTopic" type="button"
+                                class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition shrink-0">
+                                Añadir
+                            </button>
+                        </div>
+
+                        <!-- Área de texto multilínea sincronizada -->
+                        <textarea id="textareaTopics" rows="6" placeholder="Tema 1&#10;Tema 2&#10;Tema 3..."
+                            class="w-full p-3.5 text-sm leading-relaxed rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition resize-y font-medium"></textarea>
+
+                        <!-- Resumen de disponibilidad -->
+                        <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-1">
+                            <span id="statusTopicsInfo">Disponibles en ruleta: 0</span>
+                            <button id="btnGoToGroupsEditor" type="button" class="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline">
+                                ← Volver a Grupos
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel de Resultados / Asignaciones Realizadas -->
+                <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
+                    <div class="px-4 sm:px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 bg-slate-50/70 dark:bg-slate-800/40">
+                        <div class="flex items-center gap-2">
+                            <h2 class="font-display font-bold text-base text-slate-900 dark:text-white">
+                                Asignaciones
+                            </h2>
+                            <span id="countAssignments" class="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">0</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <button id="btnCopyResults" type="button"
+                                class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                                </svg>
+                                <span>Copiar</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Lista de asignaciones -->
+                    <div id="assignmentsList" class="p-4 max-h-[340px] overflow-y-auto space-y-2.5">
+                        <!-- Estado vacío inicial -->
+                        <div id="emptyAssignments" class="text-center py-8 px-4">
+                            <div class="w-12 h-12 mx-auto rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-3">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                                </svg>
+                            </div>
+                            <p class="text-sm font-medium text-slate-600 dark:text-slate-300">Aún no hay asignaciones</p>
+                            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                                Gira la ruleta para elegir un grupo y luego su tema correspondiente.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- MODAL DE RESULTADO (Ganador de Grupo o Pareja Completa) -->
+    <div id="resultModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl animate-pop-in text-center relative">
+            <!-- Icono decorativo superior -->
+            <div id="modalIconWrap" class="w-16 h-16 mx-auto rounded-2xl bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300 flex items-center justify-center mb-4 text-3xl shadow-inner">
+                🎉
+            </div>
+
+            <p id="modalSubtitle" class="text-xs font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-1">
+                ¡Grupo Seleccionado!
+            </p>
+            <h3 id="modalTitle" class="font-display text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white break-words">
+                Grupo 1
+            </h3>
+
+            <!-- Bloque de pareja completada (visible cuando se completa Grupo + Tema) -->
+            <div id="modalPairBox" class="hidden mt-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-left space-y-2">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Grupo</span>
+                    <span id="modalPairGroup" class="text-sm font-bold text-indigo-600 dark:text-indigo-400 text-right"></span>
+                </div>
+                <div class="border-t border-slate-200 dark:border-slate-700"></div>
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Tema asignado</span>
+                    <span id="modalPairTopic" class="text-sm font-bold text-emerald-600 dark:text-emerald-400 text-right"></span>
+                </div>
+            </div>
+
+            <!-- Botones de acción del modal -->
+            <div class="mt-6 flex flex-col sm:flex-row gap-2.5 justify-center">
+                <button id="btnModalPrimary" type="button"
+                    class="w-full sm:w-auto flex-1 px-5 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 shadow-md shadow-indigo-500/25 transition">
+                    Ahora girar por Tema →
+                </button>
+                <button id="btnModalSecondary" type="button"
+                    class="w-full sm:w-auto px-4 py-3 rounded-xl font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE CONFIRMACIÓN PERSONALIZADO (reemplaza confirm()) -->
+    <div id="confirmModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl animate-pop-in">
+            <h3 id="confirmTitle" class="font-display text-lg font-bold text-slate-900 dark:text-white">¿Reiniciar sorteo?</h3>
+            <p id="confirmMessage" class="text-sm text-slate-500 dark:text-slate-400 mt-2">
+                Se borrarán las asignaciones actuales y volverán a estar disponibles todos los grupos y temas en la ruleta.
+            </p>
+            <div class="mt-5 flex justify-end gap-2">
+                <button id="btnConfirmCancel" type="button"
+                    class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition">
+                    Cancelar
+                </button>
+                <button id="btnConfirmOk" type="button"
+                    class="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-rose-600 hover:bg-rose-500 transition">
+                    Sí, confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * ============================================================================
+         * RULETA DE GRUPOS Y TEMAS - LÓGICA PRINCIPAL
+         * ============================================================================
+         */
+        (() => {
+            'use strict';
+
+            // ------------------------------------------------------------------------
+            // 1. ESTADO DE LA APLICACIÓN Y PALETAS DE COLORES
+            // ------------------------------------------------------------------------
+            const GROUP_PALETTE = [
+                '#4F46E5', '#7C3AED', '#2563EB', '#0891B2',
+                '#DB2777', '#EA580C', '#0D9488', '#9333EA',
+                '#E11D48', '#0284C7', '#65A30D', '#D97706'
+            ];
+
+            const TOPIC_PALETTE = [
+                '#059669', '#0D9488', '#0284C7', '#7C3AED',
+                '#D97706', '#E11D48', '#4F46E5', '#16A34A',
+                '#C026D3', '#EA580C', '#2563EB', '#65A30D'
+            ];
+
+            // Datos iniciales de ejemplo para probar de inmediato
+            const DEFAULT_GROUPS = [
+                'Grupo 1',
+                'Grupo 2',
+                'Grupo 3',
+                'Grupo 4',
+                'Grupo 5',
+                'Grupo 6'
+            ];
+
+            const DEFAULT_TOPICS = [
+                'Inteligencia Artificial',
+                'Energías Renovables',
+                'Ciberseguridad',
+                'Economía Circular',
+                'Realidad Virtual',
+                'Biotecnología'
+            ];
+
+            const state = {
+                allGroups: [...DEFAULT_GROUPS],
+                allTopics: [...DEFAULT_TOPICS],
+                usedGroups: new Set(),       // Índices o nombres ya asignados (por texto único normalizado o conteo)
+                usedTopics: new Set(),
+                // Usamos arreglos de elementos restantes para manejar incluso nombres repetidos con precisión
+                availableGroups: [...DEFAULT_GROUPS],
+                availableTopics: [...DEFAULT_TOPICS],
+                wheelMode: 'groups',         // 'groups' | 'topics'
+                pendingGroup: null,          // Grupo elegido esperando que se sortee su tema
+                assignments: [],             // [{ id, group, topic }]
+                autoRemove: true,
+                soundEnabled: true,
+                isSpinning: false,
+                currentAngle: 0,             // Ángulo actual de la ruleta en radianes
+                lastTickIndex: -1,
+                ledPhase: 0                  // Fase de parpadeo de luces LED del borde
+            };
+
+            // ------------------------------------------------------------------------
+            // 2. REFERENCIAS AL DOM
+            // ------------------------------------------------------------------------
+            const el = {
+                wheelCanvas: document.getElementById('wheelCanvas'),
+                wheelWrapper: document.getElementById('wheelWrapper'),
+                wheelPointer: document.getElementById('wheelPointer'),
+                btnCenterSpin: document.getElementById('btnCenterSpin'),
+                btnSpinMain: document.getElementById('btnSpinMain'),
+                btnSpinText: document.getElementById('btnSpinText'),
+                btnQuickAssign: document.getElementById('btnQuickAssign'),
+                wheelModeBadge: document.getElementById('wheelModeBadge'),
+
+                tabWheelGroups: document.getElementById('tabWheelGroups'),
+                tabWheelTopics: document.getElementById('tabWheelTopics'),
+                badgeWheelGroupsCount: document.getElementById('badgeWheelGroupsCount'),
+                badgeWheelTopicsCount: document.getElementById('badgeWheelTopicsCount'),
+                chkAutoRemove: document.getElementById('chkAutoRemove'),
+
+                pendingGroupBanner: document.getElementById('pendingGroupBanner'),
+                pendingGroupName: document.getElementById('pendingGroupName'),
+                btnCancelPendingGroup: document.getElementById('btnCancelPendingGroup'),
+
+                editorTabGroups: document.getElementById('editorTabGroups'),
+                editorTabTopics: document.getElementById('editorTabTopics'),
+                panelGroups: document.getElementById('panelGroups'),
+                panelTopics: document.getElementById('panelTopics'),
+                countTotalGroups: document.getElementById('countTotalGroups'),
+                countTotalTopics: document.getElementById('countTotalTopics'),
+                statusGroupsInfo: document.getElementById('statusGroupsInfo'),
+                statusTopicsInfo: document.getElementById('statusTopicsInfo'),
+
+                inputSingleGroup: document.getElementById('inputSingleGroup'),
+                btnAddSingleGroup: document.getElementById('btnAddSingleGroup'),
+                textareaGroups: document.getElementById('textareaGroups'),
+                btnAutoGenGroups: document.getElementById('btnAutoGenGroups'),
+                btnShuffleGroups: document.getElementById('btnShuffleGroups'),
+                btnClearGroups: document.getElementById('btnClearGroups'),
+                btnGoToTopicsEditor: document.getElementById('btnGoToTopicsEditor'),
+
+                inputSingleTopic: document.getElementById('inputSingleTopic'),
+                btnAddSingleTopic: document.getElementById('btnAddSingleTopic'),
+                textareaTopics: document.getElementById('textareaTopics'),
+                btnShuffleTopics: document.getElementById('btnShuffleTopics'),
+                btnClearTopics: document.getElementById('btnClearTopics'),
+                btnGoToGroupsEditor: document.getElementById('btnGoToGroupsEditor'),
+
+                assignmentsList: document.getElementById('assignmentsList'),
+                emptyAssignments: document.getElementById('emptyAssignments'),
+                countAssignments: document.getElementById('countAssignments'),
+                btnCopyResults: document.getElementById('btnCopyResults'),
+
+                btnSound: document.getElementById('btnSound'),
+                iconSoundOn: document.getElementById('iconSoundOn'),
+                iconSoundOff: document.getElementById('iconSoundOff'),
+                btnTheme: document.getElementById('btnTheme'),
+                iconMoon: document.getElementById('iconMoon'),
+                iconSun: document.getElementById('iconSun'),
+                btnResetSession: document.getElementById('btnResetSession'),
+
+                resultModal: document.getElementById('resultModal'),
+                modalIconWrap: document.getElementById('modalIconWrap'),
+                modalSubtitle: document.getElementById('modalSubtitle'),
+                modalTitle: document.getElementById('modalTitle'),
+                modalPairBox: document.getElementById('modalPairBox'),
+                modalPairGroup: document.getElementById('modalPairGroup'),
+                modalPairTopic: document.getElementById('modalPairTopic'),
+                btnModalPrimary: document.getElementById('btnModalPrimary'),
+                btnModalSecondary: document.getElementById('btnModalSecondary'),
+
+                confirmModal: document.getElementById('confirmModal'),
+                confirmTitle: document.getElementById('confirmTitle'),
+                confirmMessage: document.getElementById('confirmMessage'),
+                btnConfirmCancel: document.getElementById('btnConfirmCancel'),
+                btnConfirmOk: document.getElementById('btnConfirmOk'),
+
+                toastContainer: document.getElementById('toastContainer'),
+                confettiCanvas: document.getElementById('confettiCanvas')
+            };
+
+            const ctx = el.wheelCanvas.getContext('2d');
+            let confirmCallback = null;
+            let modalPrimaryAction = null;
+
+            // ------------------------------------------------------------------------
+            // 3. MOTOR DE SONIDO (TONE.JS)
+            // ------------------------------------------------------------------------
+            const audio = {
+                initialized: false,
+                tickSynth: null,
+                winSynth: null,
+
+                async init() {
+                    if (this.initialized || typeof Tone === 'undefined') return;
+                    try {
+                        await Tone.start();
+                        // Sintetizador corto tipo "clic de clavija" para la ruleta
+                        this.tickSynth = new Tone.MembraneSynth({
+                            pitchDecay: 0.015,
+                            octaves: 3,
+                            envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.02 }
+                        }).toDestination();
+                        this.tickSynth.volume.value = -10;
+
+                        // Sintetizador polifónico alegre para celebración
+                        this.winSynth = new Tone.PolySynth(Tone.Synth, {
+                            oscillator: { type: 'triangle' },
+                            envelope: { attack: 0.02, decay: 0.25, sustain: 0.15, release: 0.6 }
+                        }).toDestination();
+                        this.winSynth.volume.value = -8;
+
+                        this.initialized = true;
+                    } catch (err) {
+                        console.warn('No se pudo iniciar el audio:', err);
+                    }
+                },
+
+                playTick() {
+                    if (!state.soundEnabled || !this.initialized || !this.tickSynth) return;
+                    try {
+                        this.tickSynth.triggerAttackRelease('G4', '64n');
+                    } catch (_) {}
+                },
+
+                playWin(isFullPair = false) {
+                    if (!state.soundEnabled || !this.initialized || !this.winSynth) return;
+                    try {
+                        const now = Tone.now();
+                        if (isFullPair) {
+                            // Fanfarria triunfal al completar Grupo + Tema
+                            this.winSynth.triggerAttackRelease(['C5', 'E5'], '8n', now);
+                            this.winSynth.triggerAttackRelease(['D5', 'F#5'], '8n', now + 0.12);
+                            this.winSynth.triggerAttackRelease(['G5', 'B5', 'D6'], '4n', now + 0.24);
+                        } else {
+                            // Acorde brillante al elegir Grupo
+                            this.winSynth.triggerAttackRelease(['C5', 'E5', 'G5'], '8n', now);
+                            this.winSynth.triggerAttackRelease(['E5', 'G5', 'C6'], '4n', now + 0.13);
+                        }
+                    } catch (_) {}
+                }
+            };
+
+            // ------------------------------------------------------------------------
+            // 4. NOTIFICACIONES TOAST Y MODAL DE CONFIRMACIÓN
+            // ------------------------------------------------------------------------
+            function showToast(message, type = 'info') {
+                const colors = {
+                    info: 'bg-slate-900 dark:bg-slate-800 text-white border-slate-700',
+                    success: 'bg-emerald-600 text-white border-emerald-500',
+                    warning: 'bg-amber-500 text-white border-amber-400',
+                    error: 'bg-rose-600 text-white border-rose-500'
+                };
+
+                const toast = document.createElement('div');
+                toast.className = `pointer-events-auto px-4 py-3 rounded-xl shadow-lg border text-sm font-medium animate-pop-in flex items-center justify-between gap-2 ${colors[type] || colors.info}`;
+                toast.textContent = message;
+
+                el.toastContainer.appendChild(toast);
+                setTimeout(() => {
+                    toast.style.opacity = '0';
+                    toast.style.transform = 'translateY(8px)';
+                    toast.style.transition = 'all 0.25s ease';
+                    setTimeout(() => toast.remove(), 260);
+                }, 2800);
+            }
+
+            function openConfirm(title, message, onConfirm) {
+                el.confirmTitle.textContent = title;
+                el.confirmMessage.textContent = message;
+                confirmCallback = onConfirm;
+                el.confirmModal.classList.remove('hidden');
+                el.confirmModal.classList.add('flex');
+            }
+
+            function closeConfirm() {
+                el.confirmModal.classList.add('hidden');
+                el.confirmModal.classList.remove('flex');
+                confirmCallback = null;
+            }
+
+            // ------------------------------------------------------------------------
+            // 5. SISTEMA DE CONFETI LIGERO EN CANVAS
+            // ------------------------------------------------------------------------
+            const confetti = {
+                particles: [],
+                animId: null,
+                ctx: el.confettiCanvas.getContext('2d'),
+
+                resize() {
+                    el.confettiCanvas.width = window.innerWidth;
+                    el.confettiCanvas.height = window.innerHeight;
+                },
+
+                burst(count = 95) {
+                    this.resize();
+                    const colors = ['#4F46E5', '#10B981', '#F59E0B', '#EC4899', '#3B82F6', '#8B5CF6'];
+                    const cx = window.innerWidth / 2;
+                    const cy = window.innerHeight * 0.42;
+
+                    for (let i = 0; i < count; i++) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const speed = 4 + Math.random() * 11;
+                        this.particles.push({
+                            x: cx,
+                            y: cy,
+                            vx: Math.cos(angle) * speed,
+                            vy: Math.sin(angle) * speed - 4,
+                            size: 5 + Math.random() * 6,
+                            color: colors[Math.floor(Math.random() * colors.length)],
+                            rotation: Math.random() * 360,
+                            vRot: (Math.random() - 0.5) * 14,
+                            alpha: 1,
+                            shape: Math.random() > 0.4 ? 'rect' : 'circle'
+                        });
+                    }
+
+                    if (!this.animId) {
+                        this.loop();
+                    }
+                },
+
+                loop() {
+                    const c = this.ctx;
+                    c.clearRect(0, 0, el.confettiCanvas.width, el.confettiCanvas.height);
+
+                    for (let i = this.particles.length - 1; i >= 0; i--) {
+                        const p = this.particles[i];
+                        p.x += p.vx;
+                        p.y += p.vy;
+                        p.vy += 0.28; // gravedad
+                        p.vx *= 0.99;
+                        p.rotation += p.vRot;
+                        p.alpha -= 0.011;
+
+                        if (p.alpha <= 0 || p.y > el.confettiCanvas.height + 20) {
+                            this.particles.splice(i, 1);
+                            continue;
+                        }
+
+                        c.save();
+                        c.globalAlpha = Math.max(0, p.alpha);
+                        c.translate(p.x, p.y);
+                        c.rotate((p.rotation * Math.PI) / 180);
+                        c.fillStyle = p.color;
+                        if (p.shape === 'rect') {
+                            c.fillRect(-p.size / 2, -p.size / 3, p.size, p.size * 0.65);
+                        } else {
+                            c.beginPath();
+                            c.arc(0, 0, p.size / 2.2, 0, Math.PI * 2);
+                            c.fill();
+                        }
+                        c.restore();
+                    }
+
+                    if (this.particles.length > 0) {
+                        this.animId = requestAnimationFrame(() => this.loop());
+                    } else {
+                        c.clearRect(0, 0, el.confettiCanvas.width, el.confettiCanvas.height);
+                        this.animId = null;
+                    }
+                }
+            };
+
+            // ------------------------------------------------------------------------
+            // 6. SINCRONIZACIÓN DE LISTAS (GRUPOS Y TEMAS)
+            // ------------------------------------------------------------------------
+            function parseLines(text) {
+                return text
+                    .split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0);
+            }
+
+            /**
+             * Recalcula los elementos disponibles en ruleta basándose en la lista total
+             * y restando aquellos que ya figuran en asignaciones (si autoRemove está activo)
+             * o en el grupo pendiente actual.
+             */
+            function syncAvailableItems() {
+                if (!state.autoRemove) {
+                    state.availableGroups = [...state.allGroups];
+                    state.availableTopics = [...state.allTopics];
+                    return;
+                }
+
+                // Copiamos las listas completas y removemos una ocurrencia por cada uso
+                const remGroups = [...state.allGroups];
+                const remTopics = [...state.allTopics];
+
+                for (const pair of state.assignments) {
+                    const gIdx = remGroups.indexOf(pair.group);
+                    if (gIdx !== -1) remGroups.splice(gIdx, 1);
+
+                    const tIdx = remTopics.indexOf(pair.topic);
+                    if (tIdx !== -1) remTopics.splice(tIdx, 1);
+                }
+
+                // También removemos el grupo pendiente si está esperando tema
+                if (state.pendingGroup !== null) {
+                    const pIdx = remGroups.indexOf(state.pendingGroup);
+                    if (pIdx !== -1) remGroups.splice(pIdx, 1);
+                }
+
+                state.availableGroups = remGroups;
+                state.availableTopics = remTopics;
+            }
+
+            function getActiveWheelItems() {
+                return state.wheelMode === 'groups' ? state.availableGroups : state.availableTopics;
+            }
+
+            // ------------------------------------------------------------------------
+            // 7. DIBUJO RESPONSIVO DE LA RULETA EN CANVAS
+            // ------------------------------------------------------------------------
+            function resizeWheelCanvas() {
+                const rect = el.wheelWrapper.getBoundingClientRect();
+                const size = Math.max(220, Math.floor(Math.min(rect.width, rect.height)));
+                const dpr = window.devicePixelRatio || 1;
+
+                el.wheelCanvas.width = size * dpr;
+                el.wheelCanvas.height = size * dpr;
+                el.wheelCanvas.style.width = `${size}px`;
+                el.wheelCanvas.style.height = `${size}px`;
+
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                drawWheel();
+            }
+
+            function drawWheel() {
+                const dpr = window.devicePixelRatio || 1;
+                const size = el.wheelCanvas.width / dpr;
+                const cx = size / 2;
+                const cy = size / 2;
+                const outerRadius = size / 2 - 8;
+                const rimWidth = Math.max(10, size * 0.032);
+                const wheelRadius = outerRadius - rimWidth;
+
+                const items = getActiveWheelItems();
+                const palette = state.wheelMode === 'groups' ? GROUP_PALETTE : TOPIC_PALETTE;
+                const isDark = document.documentElement.classList.contains('dark');
+
+                ctx.clearRect(0, 0, size, size);
+
+                // 1. Sombra suave bajo la ruleta
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(cx, cy, outerRadius, 0, Math.PI * 2);
+                ctx.shadowColor = isDark ? 'rgba(0,0,0,0.55)' : 'rgba(15,23,42,0.16)';
+                ctx.shadowBlur = 18;
+                ctx.shadowOffsetY = 6;
+                ctx.fillStyle = isDark ? '#1E293B' : '#0F172A';
+                ctx.fill();
+                ctx.restore();
+
+                // 2. Borde exterior decorativo
+                const rimGrad = ctx.createLinearGradient(0, 0, size, size);
+                if (state.wheelMode === 'groups') {
+                    rimGrad.addColorStop(0, '#312E81');
+                    rimGrad.addColorStop(1, '#4F46E5');
+                } else {
+                    rimGrad.addColorStop(0, '#064E3B');
+                    rimGrad.addColorStop(1, '#059669');
+                }
+                ctx.beginPath();
+                ctx.arc(cx, cy, outerRadius, 0, Math.PI * 2);
+                ctx.fillStyle = rimGrad;
+                ctx.fill();
+
+                // 3. Luces LED decorativas en el borde
+                const ledCount = 24;
+                for (let i = 0; i < ledCount; i++) {
+                    const angle = (i / ledCount) * Math.PI * 2;
+                    const lx = cx + Math.cos(angle) * (outerRadius - rimWidth / 2);
+                    const ly = cy + Math.sin(angle) * (outerRadius - rimWidth / 2);
+                    const isLit = (i + state.ledPhase) % 2 === 0;
+
+                    ctx.beginPath();
+                    ctx.arc(lx, ly, Math.max(2.2, rimWidth * 0.22), 0, Math.PI * 2);
+                    ctx.fillStyle = isLit ? '#FDE047' : 'rgba(255,255,255,0.28)';
+                    ctx.fill();
+                }
+
+                // 4. Caso especial: lista vacía
+                if (items.length === 0) {
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, wheelRadius, 0, Math.PI * 2);
+                    ctx.fillStyle = isDark ? '#0F172A' : '#F1F5F9';
+                    ctx.fill();
+
+                    ctx.fillStyle = isDark ? '#94A3B8' : '#64748B';
+                    ctx.font = `600 ${Math.max(13, size * 0.04)}px Inter, sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    const emptyText = state.wheelMode === 'groups'
+                        ? 'Sin grupos disponibles'
+                        : 'Sin temas disponibles';
+                    ctx.fillText(emptyText, cx, cy - 38);
+
+                    ctx.font = `400 ${Math.max(11, size * 0.031)}px Inter, sans-serif`;
+                    ctx.fillText('Agrega elementos o reinicia el sorteo', cx, cy + 44);
+                    return;
+                }
+
+                // 5. Dibujo de porciones (slices)
+                const sliceAngle = (Math.PI * 2) / items.length;
+                for (let i = 0; i < items.length; i++) {
+                    const start = state.currentAngle + i * sliceAngle;
+                    const end = start + sliceAngle;
+
+                    ctx.beginPath();
+                    ctx.moveTo(cx, cy);
+                    ctx.arc(cx, cy, wheelRadius, start, end);
+                    ctx.closePath();
+
+                    // Evitamos que el último y el primero compartan color si hay coincidencia
+                    let colorIdx = i % palette.length;
+                    if (i === items.length - 1 && items.length > 1 && colorIdx === 0) {
+                        colorIdx = 2;
+                    }
+                    ctx.fillStyle = palette[colorIdx];
+                    ctx.fill();
+
+                    // Separador blanco sutil entre porciones
+                    ctx.lineWidth = items.length > 20 ? 1 : 2;
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+                    ctx.stroke();
+
+                    // Texto centrado radialmente dentro de cada porción
+                    ctx.save();
+                    ctx.translate(cx, cy);
+                    ctx.rotate(start + sliceAngle / 2);
+
+                    const textRadius = wheelRadius * 0.64;
+                    const maxTextWidth = wheelRadius * 0.56;
+                    // Tamaño de fuente adaptable según cantidad de porciones y tamaño del canvas
+                    const baseFont = size * 0.042;
+                    const dynamicFont = Math.max(
+                        10,
+                        Math.min(baseFont, (wheelRadius * sliceAngle) * 0.34, 17)
+                    );
+
+                    ctx.font = `700 ${dynamicFont}px Inter, sans-serif`;
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.shadowColor = 'rgba(0,0,0,0.35)';
+                    ctx.shadowBlur = 3;
+
+                    // Recorte elegante con puntos suspensivos si el texto es largo
+                    let label = items[i];
+                    if (ctx.measureText(label).width > maxTextWidth) {
+                        while (label.length > 2 && ctx.measureText(label + '…').width > maxTextWidth) {
+                            label = label.slice(0, -1);
+                        }
+                        label += '…';
+                    }
+
+                    ctx.fillText(label, textRadius, 0);
+                    ctx.restore();
+
+                    // Pequeños pines metálicos en el perímetro de cada división
+                    const pinX = cx + Math.cos(start) * (wheelRadius - 4);
+                    const pinY = cy + Math.sin(start) * (wheelRadius - 4);
+                    ctx.beginPath();
+                    ctx.arc(pinX, pinY, 3, 0, Math.PI * 2);
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fill();
+                }
+
+                // 6. Brillo radial sutil en la superficie
+                const gloss = ctx.createRadialGradient(cx, cy, wheelRadius * 0.15, cx, cy, wheelRadius);
+                gloss.addColorStop(0, 'rgba(255,255,255,0.16)');
+                gloss.addColorStop(0.7, 'rgba(255,255,255,0)');
+                gloss.addColorStop(1, 'rgba(0,0,0,0.14)');
+                ctx.beginPath();
+                ctx.arc(cx, cy, wheelRadius, 0, Math.PI * 2);
+                ctx.fillStyle = gloss;
+                ctx.fill();
+            }
+
+            /**
+             * Calcula exactamente qué índice de porción está bajo el puntero superior (-PI/2 = 3PI/2)
+             */
+            function getIndexAtPointer(angle, itemCount) {
+                if (itemCount <= 0) return -1;
+                const pointerAngle = Math.PI * 1.5; // Arriba (270°)
+                const twoPi = Math.PI * 2;
+                const rel = ((pointerAngle - angle) % twoPi + twoPi) % twoPi;
+                const sliceAngle = twoPi / itemCount;
+                return Math.floor(rel / sliceAngle) % itemCount;
+            }
+
+            // ------------------------------------------------------------------------
+            // 8. ANIMACIÓN DE GIRO DE LA RULETA
+            // ------------------------------------------------------------------------
+            async function spinWheel() {
+                if (state.isSpinning) return;
+
+                const items = getActiveWheelItems();
+                if (items.length === 0) {
+                    const tipo = state.wheelMode === 'groups' ? 'grupos' : 'temas';
+                    showToast(`No hay ${tipo} disponibles para girar. Añade más o reinicia el sorteo.`, 'warning');
+                    return;
+                }
+
+                // Inicializamos audio tras interacción del usuario
+                await audio.init();
+
+                state.isSpinning = true;
+                updateUIState();
+
+                const startAngle = state.currentAngle;
+                const sliceAngle = (Math.PI * 2) / items.length;
+
+                // Elegimos un giro de entre 5 y 8 vueltas completas más un desplazamiento aleatorio
+                const extraTurns = (5 + Math.random() * 3) * Math.PI * 2;
+                let randomOffset = Math.random() * Math.PI * 2;
+
+                // Pequeño ajuste para evitar caer milimétricamente sobre la línea divisoria
+                const targetRaw = startAngle + extraTurns + randomOffset;
+                const pointerAngle = Math.PI * 1.5;
+                const rel = ((pointerAngle - targetRaw) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+                const posInSlice = (rel % sliceAngle) / sliceAngle;
+                if (posInSlice < 0.06 || posInSlice > 0.94) {
+                    randomOffset += sliceAngle * 0.15;
+                }
+
+                const totalRotation = extraTurns + randomOffset;
+                const duration = 4200 + Math.random() * 600; // 4.2 a 4.8 segundos
+                const startTime = performance.now();
+                state.lastTickIndex = getIndexAtPointer(state.currentAngle, items.length);
+
+                function animateFrame(now) {
+                    const elapsed = now - startTime;
+                    const t = Math.min(1, elapsed / duration);
+
+                    // Easing quartic ease-out para frenado realista y emocionante
+                    const eased = 1 - Math.pow(1 - t, 4);
+                    state.currentAngle = startAngle + totalRotation * eased;
+
+                    // Detectar cambio de porción para sonido tick + rebote del puntero + luces LED
+                    const currentIdx = getIndexAtPointer(state.currentAngle, items.length);
+                    if (currentIdx !== state.lastTickIndex) {
+                        state.lastTickIndex = currentIdx;
+                        state.ledPhase = (state.ledPhase + 1) % 2;
+                        audio.playTick();
+                        triggerPointerBounce();
+                    }
+
+                    drawWheel();
+
+                    if (t < 1) {
+                        requestAnimationFrame(animateFrame);
+                    } else {
+                        state.currentAngle = state.currentAngle % (Math.PI * 2);
+                        state.isSpinning = false;
+                        const winnerIdx = getIndexAtPointer(state.currentAngle, items.length);
+                        const winnerValue = items[winnerIdx];
+                        handleSpinWinner(winnerValue);
+                    }
+                }
+
+                requestAnimationFrame(animateFrame);
+            }
+
+            function triggerPointerBounce() {
+                el.wheelPointer.classList.remove('pointer-ticking');
+                // Reflow para reiniciar la animación CSS limpiamente
+                void el.wheelPointer.offsetWidth;
+                el.wheelPointer.classList.add('pointer-ticking');
+            }
+
+            // ------------------------------------------------------------------------
+            // 9. MANEJO DEL RESULTADO DEL GIRO (FLUJO GRUPO -> TEMA)
+            // ------------------------------------------------------------------------
+            function handleSpinWinner(winnerValue) {
+                if (state.wheelMode === 'groups') {
+                    // Se ha elegido un Grupo
+                    state.pendingGroup = winnerValue;
+                    syncAvailableItems();
+                    updateUIState();
+                    drawWheel();
+
+                    audio.playWin(false);
+                    confetti.burst(45);
+
+                    const hasTopics = state.availableTopics.length > 0;
+                    openResultModal({
+                        icon: '👥',
+                        subtitle: '¡Grupo seleccionado!',
+                        title: winnerValue,
+                        pair: null,
+                        primaryText: hasTopics ? 'Ahora girar por Tema →' : 'Aceptar',
+                        onPrimary: () => {
+                            closeResultModal();
+                            if (hasTopics) {
+                                setWheelMode('topics');
+                            }
+                        }
+                    });
+                } else {
+                    // Se ha elegido un Tema
+                    const topicValue = winnerValue;
+
+                    if (state.pendingGroup !== null) {
+                        // ¡Pareja completa! Grupo + Tema
+                        const pairedGroup = state.pendingGroup;
+                        state.assignments.unshift({
+                            id: Date.now() + Math.random(),
+                            group: pairedGroup,
+                            topic: topicValue
+                        });
+                        state.pendingGroup = null;
+                        syncAvailableItems();
+                        updateUIState();
+                        drawWheel();
+
+                        audio.playWin(true);
+                        confetti.burst(115);
+
+                        const hasMoreGroups = state.availableGroups.length > 0;
+                        openResultModal({
+                            icon: '🏆',
+                            subtitle: '¡Asignación completada!',
+                            title: topicValue,
+                            pair: { group: pairedGroup, topic: topicValue },
+                            primaryText: hasMoreGroups ? 'Siguiente Grupo →' : '¡Listo!',
+                            onPrimary: () => {
+                                closeResultModal();
+                                if (hasMoreGroups) {
+                                    setWheelMode('groups');
+                                }
+                            }
+                        });
+                    } else {
+                        // Se giró la ruleta de temas de forma independiente (sin grupo previo)
+                        audio.playWin(false);
+                        confetti.burst(55);
+
+                        if (state.autoRemove) {
+                            const idx = state.availableTopics.indexOf(topicValue);
+                            if (idx !== -1) state.availableTopics.splice(idx, 1);
+                        }
+                        updateUIState();
+                        drawWheel();
+
+                        openResultModal({
+                            icon: '📚',
+                            subtitle: 'Tema sorteado',
+                            title: topicValue,
+                            pair: null,
+                            primaryText: 'Continuar',
+                            onPrimary: () => closeResultModal()
+                        });
+                    }
+                }
+            }
+
+            // ------------------------------------------------------------------------
+            // 10. SORTEO RÁPIDO AUTOMÁTICO (EMPAREJA TODO LO RESTANTE)
+            // ------------------------------------------------------------------------
+            async function quickAssignAll() {
+                if (state.isSpinning) return;
+
+                // Si había un grupo pendiente, lo reintegramos temporalmente para emparejar todo parejo
+                const groupsPool = state.pendingGroup
+                    ? [state.pendingGroup, ...state.availableGroups]
+                    : [...state.availableGroups];
+                const topicsPool = [...state.availableTopics];
+
+                if (groupsPool.length === 0 || topicsPool.length === 0) {
+                    showToast('Necesitas tener al menos un grupo y un tema disponibles.', 'warning');
+                    return;
+                }
+
+                await audio.init();
+
+                // Mezcla Fisher-Yates para ambos arreglos
+                const shuffle = (arr) => {
+                    const copy = [...arr];
+                    for (let i = copy.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [copy[i], copy[j]] = [copy[j], copy[i]];
+                    }
+                    return copy;
+                };
+
+                const sGroups = shuffle(groupsPool);
+                const sTopics = shuffle(topicsPool);
+                const pairsToCreate = Math.min(sGroups.length, sTopics.length);
+
+                for (let i = 0; i < pairsToCreate; i++) {
+                    state.assignments.unshift({
+                        id: Date.now() + i + Math.random(),
+                        group: sGroups[i],
+                        topic: sTopics[i]
+                    });
+                }
+
+                state.pendingGroup = null;
+                syncAvailableItems();
+                updateUIState();
+                drawWheel();
+
+                audio.playWin(true);
+                confetti.burst(130);
+                showToast(`¡Se asignaron ${pairsToCreate} pares automáticamente!`, 'success');
+            }
+
+            // ------------------------------------------------------------------------
+            // 11. MODALES Y ACTUALIZACIÓN DE LA INTERFAZ
+            // ------------------------------------------------------------------------
+            function openResultModal({ icon, subtitle, title, pair, primaryText, onPrimary }) {
+                el.modalIconWrap.textContent = icon;
+                el.modalSubtitle.textContent = subtitle;
+                el.modalTitle.textContent = title;
+                el.btnModalPrimary.textContent = primaryText;
+                modalPrimaryAction = onPrimary;
+
+                if (pair) {
+                    el.modalPairBox.classList.remove('hidden');
+                    el.modalPairGroup.textContent = pair.group;
+                    el.modalPairTopic.textContent = pair.topic;
+                } else {
+                    el.modalPairBox.classList.add('hidden');
+                }
+
+                el.resultModal.classList.remove('hidden');
+                el.resultModal.classList.add('flex');
+            }
+
+            function closeResultModal() {
+                el.resultModal.classList.add('hidden');
+                el.resultModal.classList.remove('flex');
+                modalPrimaryAction = null;
+            }
+
+            function setWheelMode(mode) {
+                if (state.isSpinning) return;
+                state.wheelMode = mode;
+                updateUIState();
+                drawWheel();
+            }
+
+            function setEditorTab(tab) {
+                const isGroups = tab === 'groups';
+
+                el.panelGroups.classList.toggle('hidden', !isGroups);
+                el.panelTopics.classList.toggle('hidden', isGroups);
+
+                if (isGroups) {
+                    el.editorTabGroups.className = 'py-3.5 px-4 text-sm font-bold border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-900 transition flex items-center justify-center gap-2';
+                    el.editorTabTopics.className = 'py-3.5 px-4 text-sm font-bold border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition flex items-center justify-center gap-2';
+                } else {
+                    el.editorTabTopics.className = 'py-3.5 px-4 text-sm font-bold border-b-2 border-emerald-600 text-emerald-600 dark:text-emerald-400 bg-white dark:bg-slate-900 transition flex items-center justify-center gap-2';
+                    el.editorTabGroups.className = 'py-3.5 px-4 text-sm font-bold border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition flex items-center justify-center gap-2';
+                }
+            }
+
+            function updateUIState() {
+                // Contadores
+                el.countTotalGroups.textContent = state.allGroups.length;
+                el.countTotalTopics.textContent = state.allTopics.length;
+                el.badgeWheelGroupsCount.textContent = state.availableGroups.length;
+                el.badgeWheelTopicsCount.textContent = state.availableTopics.length;
+                el.statusGroupsInfo.textContent = `Disponibles en ruleta: ${state.availableGroups.length} de ${state.allGroups.length}`;
+                el.statusTopicsInfo.textContent = `Disponibles en ruleta: ${state.availableTopics.length} de ${state.allTopics.length}`;
+
+                // Estilo de pestañas de la ruleta
+                const isGroupsMode = state.wheelMode === 'groups';
+                if (isGroupsMode) {
+                    el.tabWheelGroups.className = 'flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-sm';
+                    el.tabWheelTopics.className = 'flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white';
+                    el.wheelModeBadge.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300';
+                    el.wheelModeBadge.textContent = 'Sorteando: Grupos';
+                    el.btnSpinText.textContent = state.isSpinning ? 'Girando...' : '¡Girar por Grupo!';
+                    el.btnSpinMain.className = 'w-full sm:w-auto min-w-[210px] px-7 py-3.5 rounded-2xl font-display font-bold text-base sm:text-lg text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 active:scale-[0.98] shadow-lg shadow-indigo-500/30 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed';
+                    el.btnCenterSpin.classList.remove('border-emerald-600', 'dark:border-emerald-400');
+                    el.btnCenterSpin.classList.add('border-indigo-600', 'dark:border-indigo-400');
+                } else {
+                    el.tabWheelTopics.className = 'flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-300 shadow-sm';
+                    el.tabWheelGroups.className = 'flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white';
+                    el.wheelModeBadge.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300';
+                    el.wheelModeBadge.textContent = state.pendingGroup
+                        ? `Eligiendo tema para: ${state.pendingGroup}`
+                        : 'Sorteando: Temas';
+                    el.btnSpinText.textContent = state.isSpinning ? 'Girando...' : '¡Girar por Tema!';
+                    el.btnSpinMain.className = 'w-full sm:w-auto min-w-[210px] px-7 py-3.5 rounded-2xl font-display font-bold text-base sm:text-lg text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-[0.98] shadow-lg shadow-emerald-500/30 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed';
+                    el.btnCenterSpin.classList.remove('border-indigo-600', 'dark:border-indigo-400');
+                    el.btnCenterSpin.classList.add('border-emerald-600', 'dark:border-emerald-400');
+                }
+
+                // Banner de grupo pendiente
+                if (state.pendingGroup) {
+                    el.pendingGroupBanner.classList.remove('hidden');
+                    el.pendingGroupName.textContent = state.pendingGroup;
+                } else {
+                    el.pendingGroupBanner.classList.add('hidden');
+                }
+
+                // Deshabilitar botones durante el giro
+                el.btnSpinMain.disabled = state.isSpinning;
+                el.btnCenterSpin.disabled = state.isSpinning;
+                el.btnQuickAssign.disabled = state.isSpinning;
+
+                renderAssignments();
+            }
+
+            function renderAssignments() {
+                el.countAssignments.textContent = state.assignments.length;
+                el.btnCopyResults.disabled = state.assignments.length === 0;
+
+                // Limpiar lista manteniendo el mensaje de estado vacío
+                Array.from(el.assignmentsList.children).forEach(child => {
+                    if (child.id !== 'emptyAssignments') child.remove();
+                });
+
+                if (state.assignments.length === 0) {
+                    el.emptyAssignments.classList.remove('hidden');
+                    return;
+                }
+
+                el.emptyAssignments.classList.add('hidden');
+
+                state.assignments.forEach((item, index) => {
+                    const orderNumber = state.assignments.length - index;
+                    const card = document.createElement('div');
+                    card.className = 'p-3 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/80 dark:bg-slate-800/60 flex items-center justify-between gap-3 group hover:border-indigo-300 dark:hover:border-indigo-700 transition';
+
+                    const left = document.createElement('div');
+                    left.className = 'flex items-center gap-3 min-w-0';
+
+                    const badge = document.createElement('span');
+                    badge.className = 'w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-xs font-extrabold flex items-center justify-center shrink-0';
+                    badge.textContent = `#${orderNumber}`;
+
+                    const textWrap = document.createElement('div');
+                    textWrap.className = 'min-w-0';
+
+                    const groupEl = document.createElement('p');
+                    groupEl.className = 'text-xs font-bold text-indigo-600 dark:text-indigo-400 truncate';
+                    groupEl.textContent = item.group;
+
+                    const topicEl = document.createElement('p');
+                    topicEl.className = 'text-sm font-semibold text-slate-800 dark:text-slate-100 truncate';
+                    topicEl.textContent = item.topic;
+
+                    textWrap.appendChild(groupEl);
+                    textWrap.appendChild(topicEl);
+                    left.appendChild(badge);
+                    left.appendChild(textWrap);
+
+                    const btnDel = document.createElement('button');
+                    btnDel.type = 'button';
+                    btnDel.title = 'Eliminar esta asignación y devolverlos a la ruleta';
+                    btnDel.className = 'p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition shrink-0';
+                    btnDel.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>`;
+                    btnDel.addEventListener('click', () => {
+                        state.assignments = state.assignments.filter(a => a.id !== item.id);
+                        syncAvailableItems();
+                        updateUIState();
+                        drawWheel();
+                        showToast('Asignación eliminada y devuelta a la ruleta.', 'info');
+                    });
+
+                    card.appendChild(left);
+                    card.appendChild(btnDel);
+                    el.assignmentsList.appendChild(card);
+                });
+            }
+
+            // ------------------------------------------------------------------------
+            // 12. COPIAR RESULTADOS AL PORTAPAPELES (COMPATIBLE CON IFRAME)
+            // ------------------------------------------------------------------------
+            function copyResultsToClipboard() {
+                if (state.assignments.length === 0) return;
+
+                // Orden cronológico (#1 primero)
+                const ordered = [...state.assignments].reverse();
+                const lines = ['📋 RESULTADOS DEL SORTEO (GRUPOS Y TEMAS)', ''];
+                ordered.forEach((item, idx) => {
+                    lines.push(`${idx + 1}. ${item.group} → ${item.topic}`);
+                });
+                const text = lines.join('\n');
+
+                try {
+                    const tempTextArea = document.createElement('textarea');
+                    tempTextArea.value = text;
+                    tempTextArea.style.position = 'fixed';
+                    tempTextArea.style.opacity = '0';
+                    document.body.appendChild(tempTextArea);
+                    tempTextArea.focus();
+                    tempTextArea.select();
+                    const ok = document.execCommand('copy');
+                    document.body.removeChild(tempTextArea);
+
+                    if (ok) {
+                        showToast('¡Resultados copiados al portapapeles!', 'success');
+                    } else {
+                        showToast('No se pudo copiar automáticamente.', 'error');
+                    }
+                } catch (err) {
+                    showToast('Error al intentar copiar los resultados.', 'error');
+                }
+            }
+
+            // ------------------------------------------------------------------------
+            // 13. EVENTOS DE USUARIO
+            // ------------------------------------------------------------------------
+            function bindEvents() {
+                // Girar ruleta (botón principal, centro o clic directo en el canvas)
+                el.btnSpinMain.addEventListener('click', spinWheel);
+                el.btnCenterSpin.addEventListener('click', spinWheel);
+                el.wheelCanvas.addEventListener('click', spinWheel);
+                el.btnQuickAssign.addEventListener('click', quickAssignAll);
+
+                // Cambio manual entre ruleta de Grupos y ruleta de Temas
+                el.tabWheelGroups.addEventListener('click', () => setWheelMode('groups'));
+                el.tabWheelTopics.addEventListener('click', () => setWheelMode('topics'));
+
+                // Checkbox "Quitar al salir"
+                el.chkAutoRemove.addEventListener('change', (e) => {
+                    state.autoRemove = e.target.checked;
+                    syncAvailableItems();
+                    updateUIState();
+                    drawWheel();
+                });
+
+                // Cancelar grupo pendiente
+                el.btnCancelPendingGroup.addEventListener('click', () => {
+                    state.pendingGroup = null;
+                    syncAvailableItems();
+                    setWheelMode('groups');
+                    showToast('Grupo devuelto a la ruleta.', 'info');
+                });
+
+                // Pestañas del panel editor
+                el.editorTabGroups.addEventListener('click', () => setEditorTab('groups'));
+                el.editorTabTopics.addEventListener('click', () => setEditorTab('topics'));
+                el.btnGoToTopicsEditor.addEventListener('click', () => {
+                    setEditorTab('topics');
+                    el.textareaTopics.focus();
+                });
+                el.btnGoToGroupsEditor.addEventListener('click', () => {
+                    setEditorTab('groups');
+                    el.textareaGroups.focus();
+                });
+
+                // Edición en tiempo real de Textarea de Grupos
+                el.textareaGroups.addEventListener('input', () => {
+                    state.allGroups = parseLines(el.textareaGroups.value);
+                    syncAvailableItems();
+                    updateUIState();
+                    drawWheel();
+                });
+
+                // Edición en tiempo real de Textarea de Temas
+                el.textareaTopics.addEventListener('input', () => {
+                    state.allTopics = parseLines(el.textareaTopics.value);
+                    syncAvailableItems();
+                    updateUIState();
+                    drawWheel();
+                });
+
+                // Añadir grupo individual
+                const addSingleGroup = () => {
+                    const val = el.inputSingleGroup.value.trim();
+                    if (!val) return;
+                    state.allGroups.push(val);
+                    el.textareaGroups.value = state.allGroups.join('\n');
+                    el.inputSingleGroup.value = '';
+                    syncAvailableItems();
+                    updateUIState();
+                    drawWheel();
+                    el.inputSingleGroup.focus();
+                };
+                el.btnAddSingleGroup.addEventListener('click', addSingleGroup);
+                el.inputSingleGroup.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); addSingleGroup(); }
+                });
+
+                // Añadir tema individual
+                const addSingleTopic = () => {
+                    const val = el.inputSingleTopic.value.trim();
+                    if (!val) return;
+                    state.allTopics.push(val);
+                    el.textareaTopics.value = state.allTopics.join('\n');
+                    el.inputSingleTopic.value = '';
+                    syncAvailableItems();
+                    updateUIState();
+                    drawWheel();
+                    el.inputSingleTopic.focus();
+                };
+                el.btnAddSingleTopic.addEventListener('click', addSingleTopic);
+                el.inputSingleTopic.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); addSingleTopic(); }
+                });
+
+                // Botón rápido "+ Generar 6 grupos"
+                el.btnAutoGenGroups.addEventListener('click', () => {
+                    const start = state.allGroups.length + 1;
+                    for (let i = 0; i < 6; i++) {
+                        state.allGroups.push(`Grupo ${start + i}`);
+                    }
+                    el.textareaGroups.value = state.allGroups.join('\n');
+                    syncAvailableItems();
+                    updateUIState();
+                    drawWheel();
+                    showToast('Se añadieron 6 grupos.', 'success');
+                });
+
+                // Mezclar listas
+                const shuffleArray = (arr) => {
+                    for (let i = arr.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [arr[i], arr[j]] = [arr[j], arr[i]];
+                    }
+                };
+
+                el.btnShuffleGroups.addEventListener('click', () => {
+                    shuffleArray(state.allGroups);
+                    el.textareaGroups.value = state.allGroups.join('\n');
+                    syncAvailableItems();
+                    updateUIState();
+                    drawWheel();
+                    showToast('Lista de grupos mezclada.', 'info');
+                });
+
+                el.btnShuffleTopics.addEventListener('click', () => {
+                    shuffleArray(state.allTopics);
+                    el.textareaTopics.value = state.allTopics.join('\n');
+                    syncAvailableItems();
+                    updateUIState();
+                    drawWheel();
+                    showToast('Lista de temas mezclada.', 'info');
+                });
+
+                // Limpiar listas
+                el.btnClearGroups.addEventListener('click', () => {
+                    state.allGroups = [];
+                    state.pendingGroup = null;
+                    el.textareaGroups.value = '';
+                    syncAvailableItems();
+                    updateUIState();
+                    drawWheel();
+                    showToast('Lista de grupos vaciada.', 'info');
+                });
+
+                el.btnClearTopics.addEventListener('click', () => {
+                    state.allTopics = [];
+                    el.textareaTopics.value = '';
+                    syncAvailableItems();
+                    updateUIState();
+                    drawWheel();
+                    showToast('Lista de temas vaciada.', 'info');
+                });
+
+                // Copiar resultados
+                el.btnCopyResults.addEventListener('click', copyResultsToClipboard);
+
+                // Sonido
+                el.btnSound.addEventListener('click', () => {
+                    state.soundEnabled = !state.soundEnabled;
+                    el.iconSoundOn.classList.toggle('hidden', !state.soundEnabled);
+                    el.iconSoundOff.classList.toggle('hidden', state.soundEnabled);
+                    showToast(state.soundEnabled ? 'Sonido activado' : 'Sonido silenciado', 'info');
+                });
+
+                // Tema claro / oscuro
+                el.btnTheme.addEventListener('click', () => {
+                    const isDark = document.documentElement.classList.toggle('dark');
+                    el.iconMoon.classList.toggle('hidden', isDark);
+                    el.iconSun.classList.toggle('hidden', !isDark);
+                    drawWheel();
+                });
+
+                // Reiniciar sorteo
+                el.btnResetSession.addEventListener('click', () => {
+                    if (state.assignments.length === 0 && !state.pendingGroup) {
+                        showToast('El sorteo ya está limpio y listo para empezar.', 'info');
+                        return;
+                    }
+                    openConfirm(
+                        '¿Reiniciar el sorteo?',
+                        'Se borrarán todas las asignaciones realizadas y volverán a aparecer todos tus grupos y temas en la ruleta.',
+                        () => {
+                            state.assignments = [];
+                            state.pendingGroup = null;
+                            state.wheelMode = 'groups';
+                            syncAvailableItems();
+                            updateUIState();
+                            drawWheel();
+                            showToast('Sorteo reiniciado correctamente.', 'success');
+                        }
+                    );
+                });
+
+                // Acciones de los modales
+                el.btnModalPrimary.addEventListener('click', () => {
+                    if (typeof modalPrimaryAction === 'function') modalPrimaryAction();
+                });
+                el.btnModalSecondary.addEventListener('click', closeResultModal);
+                el.resultModal.addEventListener('click', (e) => {
+                    if (e.target === el.resultModal) closeResultModal();
+                });
+
+                el.btnConfirmCancel.addEventListener('click', closeConfirm);
+                el.btnConfirmOk.addEventListener('click', () => {
+                    if (typeof confirmCallback === 'function') confirmCallback();
+                    closeConfirm();
+                });
+                el.confirmModal.addEventListener('click', (e) => {
+                    if (e.target === el.confirmModal) closeConfirm();
+                });
+
+                // Atajo de teclado: Barra espaciadora para girar (si no se está escribiendo en un input)
+                window.addEventListener('keydown', (e) => {
+                    const tag = document.activeElement?.tagName;
+                    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+                    if (e.code === 'Space' && el.resultModal.classList.contains('hidden') && el.confirmModal.classList.contains('hidden')) {
+                        e.preventDefault();
+                        spinWheel();
+                    } else if (e.code === 'Escape') {
+                        closeResultModal();
+                        closeConfirm();
+                    }
+                });
+
+                // Redimensionamiento responsivo del canvas
+                window.addEventListener('resize', () => {
+                    resizeWheelCanvas();
+                    confetti.resize();
+                });
+            }
+
+            // ------------------------------------------------------------------------
+            // 14. INICIALIZACIÓN
+            // ------------------------------------------------------------------------
+            function init() {
+                // Cargar listas de ejemplo en los textareas
+                el.textareaGroups.value = state.allGroups.join('\n');
+                el.textareaTopics.value = state.allTopics.join('\n');
+
+                syncAvailableItems();
+                bindEvents();
+                updateUIState();
+                resizeWheelCanvas();
+                confetti.resize();
+            }
+
+            window.addEventListener('load', init);
+        })();
+    </script>
+</body>
+</html>
